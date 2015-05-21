@@ -128,7 +128,7 @@ char *compile (const char * const in, const long l) {
 			b = append(b, &p, &len, "push %rdi\n\t"
 						"call getchar\n\t"
 						"pop %rdi\n\t"
-						"movb %rax, (%rdi)\n\t");
+						"movb %al, (%rdi)\n\t");
 		} else if (currsymbol == '[') {
 			int bnum = cb;
 			if (bi > blen) {
