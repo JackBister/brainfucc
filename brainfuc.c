@@ -130,21 +130,28 @@ char *compile (const char * const in, const long l) {
 						"pop %rdi\n\t"
 						"movb %al, (%rdi)\n\t");
 		} else if (currsymbol == '[') {
-			int bnum = cb;
-			if (bi > blen) {
-				blen *= 2;
-				bnums = realloc(bnums, blen);
+			if (in[i+1] == '-' && in[i+2] == ']') {
+				//This is a common pattern to clear the memory
+				//pointed to.
+				b = append(b, &p, &len, "movb $0, (%rdi)\n\t");
+				i += 2;
+			} else {
+				int bnum = cb;
+				if (bi > blen) {
+					blen *= 2;
+					bnums = realloc(bnums, blen);
+				}
+				bnums[bi++] = cb++;
+				char *bnumstring = itoa(bnum);
+				b = append(b, &p, &len, "l");
+				b = append(b, &p, &len, bnumstring);
+				b = append(b, &p, &len, ":\n\t"
+							"cmpb $0, (%rdi)\n\t"
+							"je l");
+				b = append(b, &p, &len, bnumstring);
+				b = append(b, &p, &len, "e\n\t");
+				free(bnumstring);
 			}
-			bnums[bi++] = cb++;
-			char *bnumstring = itoa(bnum);
-			b = append(b, &p, &len, "l");
-			b = append(b, &p, &len, bnumstring);
-			b = append(b, &p, &len, ":\n\t"
-						"cmpb $0, (%rdi)\n\t"
-						"je l");
-			b = append(b, &p, &len, bnumstring);
-			b = append(b, &p, &len, "e\n\t");
-			free(bnumstring);
 		} else if (currsymbol == ']') {
 			if (bi < 0) {
 				printf("Error: Unbalanced brackets.\n");
