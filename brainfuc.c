@@ -1,3 +1,4 @@
+#include "stdarg.h"
 #include "stdbool.h"
 #include "stdio.h"
 #include "stdlib.h"
@@ -9,7 +10,13 @@ typedef struct {
 	bool winMode;
 } brainfucc_flags;
 
-char *append (char *, long * const, long * const, const char * const);
+typedef struct {
+	char *data;
+	long capacity;
+	long size;
+} array;
+
+array *append (array *, int, ...);
 char *compile (const char * const, const long, bool);
 char *itoa (const int);
 brainfucc_flags ParseArgs(int argc, char **argv);
@@ -65,11 +72,8 @@ brainfucc_flags ParseArgs(int argc, char **argv) {
 //Compiles the brainfuck program stored in "in". "in" has length "l".
 //Characters that aren't part of the brainfuck language are simply ignored.
 char *compile (const char * const in, const long l, bool winMode) {
-	long len = 1024;
-	//output buffer
-	char *b = malloc(len);
-	//current index in the output buffer
-	long p = 0;
+	array output = {NULL, 1024, 0};
+	output.data = malloc(output.capacity);
 
 	//bnums is a basic stack keeping track of the level of indentation the
 	//user is on. This is used to name the labels when brackets are used.
@@ -92,15 +96,11 @@ char *compile (const char * const in, const long l, bool winMode) {
 	char *arg0regb = winMode ? "%cl" : "%dil";
 
 
-	b = append(b, &p, &len, ".global main\n"
-				"main:\n\t"
-		      		"mov $30000, ");
-	b = append(b, &p, &len, arg0reg);
-	b = append(b, &p, &len, "\n\t"
-		      		"call malloc\n\t"
-				"mov %rax, ");
-	b = append(b, &p, &len, arg0reg);
-	b = append(b, &p, &len, "\n\t");
+	append(&output, 5, ".global main\n"
+			"main:\n\t"
+		      	"mov $30000, ", arg0reg, "\n\t"
+		      	"call malloc\n\t"
+			"mov %rax, ", arg0reg, "\n\t");
 	for (int i = 0; i < l; i++) {		
 		char currsymbol;
 		switch(in[i]) {
@@ -124,64 +124,32 @@ char *compile (const char * const in, const long l, bool winMode) {
 			char *seqs = itoa(seq);
 			seq = 1;
 			if (lastsymbol == '>') {
-				b = append(b, &p, &len, "add $");
-				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", ");
-				b = append(b, &p, &len, arg0reg);
-				b = append(b, &p, &len, "\n\t");
+				append(&output, 5, "add $", seqs, ", ", arg0reg, "\n\t");
 			} else if (lastsymbol == '<') {
-				b = append(b, &p, &len, "sub $");
-				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", ");
-				b = append(b, &p, &len, arg0reg);
-				b = append(b, &p, &len, "\n\t");
+				append(&output, 5, "sub $", seqs, ", ", arg0reg, "\n\t");
 			} else if (lastsymbol == '+') {
-				b = append(b, &p, &len, "addb $");
-				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", (");
-				b = append(b, &p, &len, arg0reg);
-				b = append(b, &p, &len, ")\n\t");
+				append(&output, 5, "addb $", seqs, ", (", arg0reg, ")\n\t");
 			} else if (lastsymbol == '-') {
-				b = append(b, &p, &len, "subb $");
-				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", (");
-				b = append(b, &p, &len, arg0reg);
-				b = append(b, &p, &len, ")\n\t");
+				append(&output, 5, "subb $", seqs, ", (", arg0reg, ")\n\t");
 			}
 			free(seqs);
 		}
 		
 		if (currsymbol == '.') {
-			b = append(b, &p, &len, "push ");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, "\n\t");
-			b = append(b, &p, &len, "movb (");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, "), ");
-			b = append(b, &p, &len, arg0regb);
-			b = append(b, &p, &len, "\n\t"
-						"call putchar\n\t");
-			b = append(b, &p, &len, "pop ");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, "\n\t");
+			append(&output, 9, "push ", arg0reg, "\n\t"
+					   "movb (", arg0reg, "), ", arg0regb, "\n\t"
+					   "call putchar\n\t"
+					   "pop ", arg0reg, "\n\t");
 		} else if (currsymbol == ',') {
-			b = append(b, &p, &len, "push ");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, "\n\t"
-						"call getchar\n\t"
-						"pop ");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, "\n\t"
-						"movb %al, (");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, ")\n\t");
+			append(&output, 7, "push ", arg0reg, "\n\t"
+					   "call getchar\n\t"
+					   "pop ", arg0reg, "\n\t"
+					   "movb %al, (", arg0reg, ")\n\t");
 		} else if (currsymbol == '[') {
 			if (in[i+1] == '-' && in[i+2] == ']') {
 				//This is a common pattern to clear the memory
 				//pointed to.
-				b = append(b, &p, &len, "movb $0, (");
-				b = append(b, &p, &len, arg0reg);
-				b = append(b, &p, &len, ")\n\t");
+				append(&output, 3, "movb $0, (", arg0reg, ")\n\t");
 				i += 2;
 			} else {
 				int bnum = cb;
@@ -191,15 +159,9 @@ char *compile (const char * const in, const long l, bool winMode) {
 				}
 				bnums[bi++] = cb++;
 				char *bnumstring = itoa(bnum);
-				b = append(b, &p, &len, "l");
-				b = append(b, &p, &len, bnumstring);
-				b = append(b, &p, &len, ":\n\t"
-							"cmpb $0, (");
-				b = append(b, &p, &len, arg0reg);
-				b = append(b, &p, &len, ")\n\t"
-							"je l");
-				b = append(b, &p, &len, bnumstring);
-				b = append(b, &p, &len, "e\n\t");
+				append(&output, 7, "l", bnumstring, ":\n\t"
+						   "cmpb $0, (", arg0reg, ")\n\t"
+						   "je l", bnumstring, "e\n\t");
 				free(bnumstring);
 			}
 		} else if (currsymbol == ']') {
@@ -209,23 +171,17 @@ char *compile (const char * const in, const long l, bool winMode) {
 			}
 			int bnum = bnums[--bi];
 			char *bnumstring = itoa(bnum);
-			b = append(b, &p, &len,	"cmpb $0, (");
-			b = append(b, &p, &len, arg0reg);
-			b = append(b, &p, &len, ")\n\t"
-						"jne l");
-			b = append(b, &p, &len, bnumstring);
-			b = append(b, &p, &len, "\n\t");
-			b = append(b, &p, &len, "l");
-			b = append(b, &p, &len, bnumstring);
-			b = append(b, &p, &len, "e:\n\t");
+			append(&output, 7, "cmpb $0, (", arg0reg, ")\n\t"
+					   "jne l", bnumstring, "\n\t"
+					   "l", bnumstring, "e:\n\t");
 			free(bnumstring);
 		}
 		lastsymbol = currsymbol;
 	}
 
-	b = append(b, &p, &len, "\0");
+	append(&output, 1, "\0");
 	free(bnums);
-	return b;
+	return output.data;
 }
 
 //Converts an integer to a string.
@@ -245,16 +201,23 @@ char *itoa(const int i) {
 	return realloc(b, l);
 }
 
-//Safely appends "after" to "s", where p is the current offset from s and l is
-//the current length of the buffer s. Reallocs if len(s+after) > maxlen(s)
-char *append (char *s, long * const p, long * const l, const char * const after) {
-	for (int i = 0; after[i] != '\0'; i++) {
-		if (*p == *l) {
-			*l = 2*(*l);
-			s = realloc(s, *l);
+//All varargs must be char * to null-terminated strings to append to a.
+//elems is the number of varargs given.
+array *append(array *a, int elems, ...) {
+	va_list ap;
+	va_start(ap, elems);
+
+	for (int i = 0; i < elems; i++) {
+		char *after = va_arg(ap, char *);
+		for (int j = 0; after[j] != '\0'; j++) {
+			if (a->size == a->capacity) {
+				a->capacity = 2*(a->capacity);
+				a->data = realloc(a->data, a->capacity);
+			}
+			a->data[a->size] = after[j];
+			a->size += 1;
 		}
-		s[*p] = after[i];
-		*p = *p + 1;
 	}
-	return s;
+	va_end(ap);
+	return a;
 }
