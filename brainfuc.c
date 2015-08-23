@@ -2,8 +2,6 @@
 #include "stdlib.h"
 #include "string.h"
 
-#define null 0
-
 char *append (char *, long * const, long * const, const char * const);
 char *compile (const char * const, const long);
 char *itoa (const int);
@@ -14,7 +12,7 @@ int main (int argc, char **argv) {
 		return 1;
 	}
 	FILE *f = fopen(argv[1], "r");
-	if (f == null) {
+	if (f == NULL) {
 		printf("Error opening file: %s\n", argv[1]);
 		return 1;
 	}
@@ -24,21 +22,21 @@ int main (int argc, char **argv) {
 	char *b = malloc(l);
 	//return to beginning of file
 	rewind(f);
-	if (b != null) {
+	if (b != NULL) {
 		fread(b, l, 1, f);
 	} else {
 		printf("Malloc error: %s may be empty.\n", argv[1]);
 		return 1;
 	}
 	fclose(f);
-	f = null;
+	f = NULL;
 
 	char *outfn = "a.s";
 	if (argc == 4) {
 		outfn = argv[3];	
 	}
 	FILE *outf = fopen(outfn, "w");
-	if (outf == null) {
+	if (outf == NULL) {
 		printf("Error writing to file.\n");
 		return 1;
 	}
@@ -188,7 +186,7 @@ char *itoa(const int i) {
 		l = snprintf(b, 20, "%d", i);
 		bl *= 2;
 	}
-	//muh null terminator
+	//muh NULL terminator
 	b[l] = 0;
 	return realloc(b, l);
 }
