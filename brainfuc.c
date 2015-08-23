@@ -17,12 +17,12 @@ typedef struct {
 	size_t size;
 } array;
 
-array *append (array *, int, ...);
-char *compile (const char * const, const long, bool);
-char *itoa (const int);
+array *Append(array *, int, ...);
+char *Compile(const char * const, const long, bool);
+char *Itoa(const int);
 brainfucc_flags ParseArgs(int argc, char **argv);
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
 	brainfucc_flags flags = ParseArgs(argc, argv);
 	FILE *f = fopen(flags.infn, "r");
 	if (f == NULL) {
@@ -49,7 +49,7 @@ int main (int argc, char **argv) {
 		printf("Error writing to file.\n");
 		return 1;
 	}
-	fprintf(outf, "%s", compile(b, l, flags.winMode));
+	fprintf(outf, "%s", Compile(b, l, flags.winMode));
 	fclose(outf);
 	free(b);
 	return 0;
@@ -72,7 +72,7 @@ brainfucc_flags ParseArgs(int argc, char **argv) {
 
 //Compiles the brainfuck program stored in "in". "in" has length "l".
 //Characters that aren't part of the brainfuck language are simply ignored.
-char *compile (const char * const in, const long l, bool winMode) {
+char *Compile(const char * const in, const long l, bool winMode) {
 	array output = {NULL, 1024, 0};
 	output.data = malloc(output.capacity);
 
@@ -97,7 +97,7 @@ char *compile (const char * const in, const long l, bool winMode) {
 	char *arg0regb = winMode ? "%cl" : "%dil";
 
 
-	append(&output, 5, ".global main\n"
+	Append(&output, 5, ".global main\n"
 			"main:\n\t"
 		      	"mov $30000, ", arg0reg, "\n\t"
 		      	"call malloc\n\t"
@@ -122,27 +122,27 @@ char *compile (const char * const in, const long l, bool winMode) {
 		if (lastsymbol == currsymbol) {
 			seq++;
 		} else {	
-			char *seqs = itoa(seq);
+			char *seqs = Itoa(seq);
 			seq = 1;
 			if (lastsymbol == '>') {
-				append(&output, 5, "add $", seqs, ", ", arg0reg, "\n\t");
+				Append(&output, 5, "add $", seqs, ", ", arg0reg, "\n\t");
 			} else if (lastsymbol == '<') {
-				append(&output, 5, "sub $", seqs, ", ", arg0reg, "\n\t");
+				Append(&output, 5, "sub $", seqs, ", ", arg0reg, "\n\t");
 			} else if (lastsymbol == '+') {
-				append(&output, 5, "addb $", seqs, ", (", arg0reg, ")\n\t");
+				Append(&output, 5, "addb $", seqs, ", (", arg0reg, ")\n\t");
 			} else if (lastsymbol == '-') {
-				append(&output, 5, "subb $", seqs, ", (", arg0reg, ")\n\t");
+				Append(&output, 5, "subb $", seqs, ", (", arg0reg, ")\n\t");
 			}
 			free(seqs);
 		}
 		
 		if (currsymbol == '.') {
-			append(&output, 9, "push ", arg0reg, "\n\t"
+			Append(&output, 9, "push ", arg0reg, "\n\t"
 					   "movb (", arg0reg, "), ", arg0regb, "\n\t"
 					   "call putchar\n\t"
 					   "pop ", arg0reg, "\n\t");
 		} else if (currsymbol == ',') {
-			append(&output, 7, "push ", arg0reg, "\n\t"
+			Append(&output, 7, "push ", arg0reg, "\n\t"
 					   "call getchar\n\t"
 					   "pop ", arg0reg, "\n\t"
 					   "movb %al, (", arg0reg, ")\n\t");
@@ -150,7 +150,7 @@ char *compile (const char * const in, const long l, bool winMode) {
 			if (in[i+1] == '-' && in[i+2] == ']') {
 				//This is a common pattern to clear the memory
 				//pointed to.
-				append(&output, 3, "movb $0, (", arg0reg, ")\n\t");
+				Append(&output, 3, "movb $0, (", arg0reg, ")\n\t");
 				i += 2;
 			} else {
 				int bnum = cb;
@@ -165,8 +165,8 @@ char *compile (const char * const in, const long l, bool winMode) {
 					bnums = realloc(bnums, blen);
 				}
 				bnums[bi++] = cb++;
-				char *bnumstring = itoa(bnum);
-				append(&output, 7, "l", bnumstring, ":\n\t"
+				char *bnumstring = Itoa(bnum);
+				Append(&output, 7, "l", bnumstring, ":\n\t"
 						   "cmpb $0, (", arg0reg, ")\n\t"
 						   "je l", bnumstring, "e\n\t");
 				free(bnumstring);
@@ -177,8 +177,8 @@ char *compile (const char * const in, const long l, bool winMode) {
 				exit(1);
 			}
 			int bnum = bnums[--bi];
-			char *bnumstring = itoa(bnum);
-			append(&output, 7, "cmpb $0, (", arg0reg, ")\n\t"
+			char *bnumstring = Itoa(bnum);
+			Append(&output, 7, "cmpb $0, (", arg0reg, ")\n\t"
 					   "jne l", bnumstring, "\n\t"
 					   "l", bnumstring, "e:\n\t");
 			free(bnumstring);
@@ -186,13 +186,13 @@ char *compile (const char * const in, const long l, bool winMode) {
 		lastsymbol = currsymbol;
 	}
 
-	append(&output, 1, "\0");
+	Append(&output, 1, "\0");
 	free(bnums);
 	return output.data;
 }
 
 //Converts an integer to a string.
-char *itoa(const int i) {
+char *Itoa(const int i) {
 	//If you manage to create an int longer than 20 characters you can 
 	//probably write your own compiler.
 	int l;
@@ -210,7 +210,7 @@ char *itoa(const int i) {
 
 //All varargs must be char * to null-terminated strings to append to a.
 //elems is the number of varargs given.
-array *append(array *a, int elems, ...) {
+array *Append(array *a, int elems, ...) {
 	va_list ap;
 	va_start(ap, elems);
 
