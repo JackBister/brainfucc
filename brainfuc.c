@@ -8,12 +8,13 @@ typedef struct {
 	char *infn;
 	char *outfn;
 	bool winMode;
+	char explicit_padding[7];
 } brainfucc_flags;
 
 typedef struct {
 	char *data;
-	long capacity;
-	long size;
+	size_t capacity;
+	size_t size;
 } array;
 
 array *append (array *, int, ...);
@@ -31,11 +32,11 @@ int main (int argc, char **argv) {
 	//count number of bytes in file
 	fseek(f, 0L, SEEK_END);
 	long l = ftell(f);
-	char *b = malloc(l);
+	char *b = malloc((size_t) l);
 	//return to beginning of file
 	rewind(f);
 	if (b != NULL) {
-		fread(b, l, 1, f);
+		fread(b, (size_t) l, 1, f);
 	} else {
 		printf("Malloc error: %s may be empty.\n", flags.infn);
 		return 1;
@@ -55,7 +56,7 @@ int main (int argc, char **argv) {
 }
 
 brainfucc_flags ParseArgs(int argc, char **argv) {
-	brainfucc_flags ret = {"no input file given", "a.s", false};
+	brainfucc_flags ret = {"no input file given", "a.s", false, {0}};
 	for (int i = 0; i < argc; i++) {
 		if (strcmp("-o", argv[i]) == 0) {
 			ret.outfn = argv[++i];
@@ -77,7 +78,7 @@ char *compile (const char * const in, const long l, bool winMode) {
 
 	//bnums is a basic stack keeping track of the level of indentation the
 	//user is on. This is used to name the labels when brackets are used.
-	int blen = 10;
+	size_t blen = 10;
 	int *bnums = malloc(blen*sizeof(int));
 	//current index in the stack
 	int bi = 0;
@@ -153,7 +154,13 @@ char *compile (const char * const in, const long l, bool winMode) {
 				i += 2;
 			} else {
 				int bnum = cb;
-				if (bi > blen) {
+				//This should never be triggered, but I added it to ensure
+				//the cast to size_t later on is correct.
+				if (bi < 0) {
+					printf("Error: Unbalanced brackets.\n");
+					exit(1);
+				}
+				if ((size_t) bi > blen) {
 					blen *= 2;
 					bnums = realloc(bnums, blen);
 				}
@@ -188,17 +195,17 @@ char *compile (const char * const in, const long l, bool winMode) {
 char *itoa(const int i) {
 	//If you manage to create an int longer than 20 characters you can 
 	//probably write your own compiler.
-	int l = -1;
-	int bl = 21;
+	int l;
+	size_t bl = 21;
 	char *b;
-	while (l < 0) {
+	do {
 		b = malloc(bl);
 		l = snprintf(b, 20, "%d", i);
 		bl *= 2;
-	}
+	} while (l < 0);
 	//muh NULL terminator
 	b[l] = 0;
-	return realloc(b, l);
+	return realloc(b, (size_t) l);
 }
 
 //All varargs must be char * to null-terminated strings to append to a.
