@@ -1,19 +1,24 @@
+#include "stdbool.h"
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
 
+typedef struct {
+	char *infn;
+	char *outfn;
+	bool winMode;
+} brainfucc_flags;
+
 char *append (char *, long * const, long * const, const char * const);
-char *compile (const char * const, const long);
+char *compile (const char * const, const long, bool);
 char *itoa (const int);
+brainfucc_flags ParseArgs(int argc, char **argv);
 
 int main (int argc, char **argv) {
-	if (argc < 2 || argc == 3 || (argc == 4 && strcmp(argv[2], "-o"))) {
-		printf("Usage: %s filename\n [-o outname]", argv[0]);
-		return 1;
-	}
-	FILE *f = fopen(argv[1], "r");
+	brainfucc_flags flags = ParseArgs(argc, argv);
+	FILE *f = fopen(flags.infn, "r");
 	if (f == NULL) {
-		printf("Error opening file: %s\n", argv[1]);
+		printf("Error opening file: %s\n", flags.infn);
 		return 1;
 	}
 	//count number of bytes in file
@@ -25,30 +30,41 @@ int main (int argc, char **argv) {
 	if (b != NULL) {
 		fread(b, l, 1, f);
 	} else {
-		printf("Malloc error: %s may be empty.\n", argv[1]);
+		printf("Malloc error: %s may be empty.\n", flags.infn);
 		return 1;
 	}
 	fclose(f);
 	f = NULL;
 
-	char *outfn = "a.s";
-	if (argc == 4) {
-		outfn = argv[3];	
-	}
-	FILE *outf = fopen(outfn, "w");
+	FILE *outf = fopen(flags.outfn, "w");
 	if (outf == NULL) {
 		printf("Error writing to file.\n");
 		return 1;
 	}
-	fprintf(outf, "%s", compile(b, l));
+	fprintf(outf, "%s", compile(b, l, flags.winMode));
 	fclose(outf);
 	free(b);
 	return 0;
 }
 
+brainfucc_flags ParseArgs(int argc, char **argv) {
+	brainfucc_flags ret = {"no input file given", "a.s", false};
+	for (int i = 0; i < argc; i++) {
+		if (strcmp("-o", argv[i]) == 0) {
+			ret.outfn = argv[++i];
+		} else if (strcmp("-w", argv[i]) == 0 ||
+			   strcmp("-windows", argv[i]) == 0) {
+			ret.winMode = true;
+		} else {
+			ret.infn = argv[i];
+		}
+	}
+	return ret;
+}
+
 //Compiles the brainfuck program stored in "in". "in" has length "l".
 //Characters that aren't part of the brainfuck language are simply ignored.
-char *compile (const char * const in, const long l) {
+char *compile (const char * const in, const long l, bool winMode) {
 	long len = 1024;
 	//output buffer
 	char *b = malloc(len);
@@ -69,12 +85,22 @@ char *compile (const char * const in, const long l) {
 	//the number of equal symbols read in a row
 	int seq = 0;
 
-	
+	//The first integer argument register: On Windows this is rcx, almost
+	//everywhere else that I know of this is rdi.
+	char *arg0reg = winMode ? "%rcx" : "%rdi";
+	//The first byte argument register.
+	char *arg0regb = winMode ? "%cl" : "%dil";
+
+
 	b = append(b, &p, &len, ".global main\n"
 				"main:\n\t"
-		      		"mov $30000, %rdi\n\t"
+		      		"mov $30000, ");
+	b = append(b, &p, &len, arg0reg);
+	b = append(b, &p, &len, "\n\t"
 		      		"call malloc\n\t"
-				"mov %rax, %rdi\n\t");
+				"mov %rax, ");
+	b = append(b, &p, &len, arg0reg);
+	b = append(b, &p, &len, "\n\t");
 	for (int i = 0; i < l; i++) {		
 		char currsymbol;
 		switch(in[i]) {
@@ -100,38 +126,62 @@ char *compile (const char * const in, const long l) {
 			if (lastsymbol == '>') {
 				b = append(b, &p, &len, "add $");
 				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", %rdi\n\t");
+				b = append(b, &p, &len, ", ");
+				b = append(b, &p, &len, arg0reg);
+				b = append(b, &p, &len, "\n\t");
 			} else if (lastsymbol == '<') {
 				b = append(b, &p, &len, "sub $");
 				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", %rdi\n\t");
+				b = append(b, &p, &len, ", ");
+				b = append(b, &p, &len, arg0reg);
+				b = append(b, &p, &len, "\n\t");
 			} else if (lastsymbol == '+') {
 				b = append(b, &p, &len, "addb $");
 				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", (%rdi)\n\t");
+				b = append(b, &p, &len, ", (");
+				b = append(b, &p, &len, arg0reg);
+				b = append(b, &p, &len, ")\n\t");
 			} else if (lastsymbol == '-') {
 				b = append(b, &p, &len, "subb $");
 				b = append(b, &p, &len, seqs);
-				b = append(b, &p, &len, ", (%rdi)\n\t");
+				b = append(b, &p, &len, ", (");
+				b = append(b, &p, &len, arg0reg);
+				b = append(b, &p, &len, ")\n\t");
 			}
 			free(seqs);
 		}
 		
 		if (currsymbol == '.') {
-			b = append(b, &p, &len, "push %rdi\n\t"
-						"movb (%rdi), %dil\n\t"
-						"call putchar\n\t"
-						"pop %rdi\n\t");
+			b = append(b, &p, &len, "push ");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, "\n\t");
+			b = append(b, &p, &len, "movb (");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, "), ");
+			b = append(b, &p, &len, arg0regb);
+			b = append(b, &p, &len, "\n\t"
+						"call putchar\n\t");
+			b = append(b, &p, &len, "pop ");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, "\n\t");
 		} else if (currsymbol == ',') {
-			b = append(b, &p, &len, "push %rdi\n\t"
+			b = append(b, &p, &len, "push ");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, "\n\t"
 						"call getchar\n\t"
-						"pop %rdi\n\t"
-						"movb %al, (%rdi)\n\t");
+						"pop ");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, "\n\t"
+						"movb %al, (");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, ")\n\t");
 		} else if (currsymbol == '[') {
 			if (in[i+1] == '-' && in[i+2] == ']') {
 				//This is a common pattern to clear the memory
 				//pointed to.
-				b = append(b, &p, &len, "movb $0, (%rdi)\n\t");
+				b = append(b, &p, &len, "movb $0, (");
+				b = append(b, &p, &len, arg0reg);
+				b = append(b, &p, &len, ")\n\t");
 				i += 2;
 			} else {
 				int bnum = cb;
@@ -144,7 +194,9 @@ char *compile (const char * const in, const long l) {
 				b = append(b, &p, &len, "l");
 				b = append(b, &p, &len, bnumstring);
 				b = append(b, &p, &len, ":\n\t"
-							"cmpb $0, (%rdi)\n\t"
+							"cmpb $0, (");
+				b = append(b, &p, &len, arg0reg);
+				b = append(b, &p, &len, ")\n\t"
 							"je l");
 				b = append(b, &p, &len, bnumstring);
 				b = append(b, &p, &len, "e\n\t");
@@ -157,7 +209,9 @@ char *compile (const char * const in, const long l) {
 			}
 			int bnum = bnums[--bi];
 			char *bnumstring = itoa(bnum);
-			b = append(b, &p, &len,	"cmpb $0, (%rdi)\n\t"
+			b = append(b, &p, &len,	"cmpb $0, (");
+			b = append(b, &p, &len, arg0reg);
+			b = append(b, &p, &len, ")\n\t"
 						"jne l");
 			b = append(b, &p, &len, bnumstring);
 			b = append(b, &p, &len, "\n\t");
