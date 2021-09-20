@@ -36,7 +36,11 @@ int main(int argc, char **argv) {
 	//return to beginning of file
 	rewind(f);
 	if (b != NULL) {
-		fread(b, (size_t) l, 1, f);
+		size_t readElements = fread(b, (size_t) l, 1, f);
+		if (readElements != 1) {
+			printf("readElements!=1, readElements=%zu", readElements);
+			return 1;
+		}
 	} else {
 		printf("Malloc error: %s may be empty.\n", flags.infn);
 		return 1;
@@ -97,11 +101,10 @@ char *Compile(const char * const in, const long l, bool winMode) {
 	char *arg0regb = winMode ? "%cl" : "%dil";
 
 
-	Append(&output, 5, ".global main\n"
+	Append(&output, 3, ".global main\n"
 			"main:\n\t"
-		      	"mov $30000, ", arg0reg, "\n\t"
-		      	"call malloc\n\t"
-			"mov %rax, ", arg0reg, "\n\t");
+				"subq $30000, %rsp\n\t"
+			"mov %rsp, ", arg0reg, "\n\t");
 	for (int i = 0; i < l; i++) {		
 		char currsymbol;
 		switch(in[i]) {
@@ -186,6 +189,7 @@ char *Compile(const char * const in, const long l, bool winMode) {
 		lastsymbol = currsymbol;
 	}
 
+	Append(&output, 1, "addq $30000, %rsp\n\t");
 	Append(&output, 1, "\0");
 	free(bnums);
 	return output.data;
